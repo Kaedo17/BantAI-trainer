@@ -1,0 +1,6 @@
+path: archive\Open-Flame-Hazards-YOLO
+train: train/images
+val: val/images
+
+nc: 1
+names: ['Open-Flame-Hazard']

@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 6
+names: ['appliances', 'computers', 'electronics', 'fans', 'laptop', 'phones']
+
+roboflow:
+  workspace: kurts-workspace-oaejc
+  project: damaged-electronics
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/kurts-workspace-oaejc/damaged-electronics/dataset/1

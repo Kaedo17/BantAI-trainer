@@ -1,0 +1,1 @@
+python bantai_scrape.py "overloaded power outlets" -n 200 -o ./data --browser --visible
