@@ -8,18 +8,49 @@ import torch
 from pathlib import Path
 from ultralytics import YOLO
 from config import get_gpu_info, print_banner
-from utils import get_folder_path
+
+def get_file_path(prompt, extension=".pt"):
+    """Get file path from user with validation"""
+    while True:
+        path = input(f"{prompt}: ").strip().strip('"')
+        if not path:
+            print("❌ Path cannot be empty. Please try again.")
+            continue
+        path = Path(path)
+        if not path.exists():
+            print(f"❌ Path '{path}' does not exist. Please try again.")
+            continue
+        if not path.is_file():
+            print(f"❌ '{path}' is not a file. Please try again.")
+            continue
+        if path.suffix != extension:
+            print(f"❌ Please select a {extension} file. Got: {path.suffix}")
+            continue
+        return path
+
+def get_folder_path(prompt):
+    """Get folder path from user with validation"""
+    while True:
+        path = input(f"{prompt}: ").strip().strip('"')
+        if not path:
+            print("❌ Path cannot be empty. Please try again.")
+            continue
+        path = Path(path)
+        if not path.exists():
+            print(f"❌ Path '{path}' does not exist. Please try again.")
+            continue
+        if not path.is_dir():
+            print(f"❌ '{path}' is not a directory. Please try again.")
+            continue
+        return path
 
 def main():
     print_banner("Model Testing")
     
-    # Get model path
-    print("\n📁 Select your trained model")
-    model_path = get_folder_path("Enter path to model file (.pt)")
-    
-    if not model_path.suffix == '.pt':
-        print("❌ Please select a .pt model file")
-        return
+    # Get model path - use file picker instead of folder picker
+    print("\n📁 Select your trained model (.pt file)")
+    print("   Example: runs/detect/Open_Flame_Model/Model_1/weights/best.pt")
+    model_path = get_file_path("Enter path to model file (.pt)", extension=".pt")
     
     # Get confidence threshold
     try:
@@ -57,18 +88,20 @@ def main():
     
     # Testing options
     print("\n📋 Testing options:")
-    print("   1. Test on image file")
+    print("   1. Test on single image file")
     print("   2. Test on folder of images")
     print("   3. Test on video file")
     print("   4. Test on webcam")
-    print("   5. Test on URL")
+    print("   5. Test on image URL")
     
     choice = input("\nSelect option (1-5): ").strip()
     
     if choice == '1':
         # Single image
-        image_path = get_folder_path("Enter image file path")
+        print("\n📸 Select an image file")
+        image_path = get_file_path("Enter image file path", extension="")
         if image_path.is_file():
+            print(f"\n🔍 Running inference on: {image_path.name}")
             results = model.predict(
                 str(image_path),
                 conf=conf_threshold,
@@ -76,13 +109,26 @@ def main():
                 save=True,
                 show=True
             )
-            print(f"\n✅ Detection complete! Results saved to runs/detect/")
+            # Display results
+            if results and len(results) > 0:
+                boxes = results[0].boxes
+                if boxes is not None and len(boxes) > 0:
+                    print(f"\n✅ Detected {len(boxes)} objects:")
+                    for i, box in enumerate(boxes):
+                        conf = box.conf.item()
+                        cls = int(box.cls.item())
+                        print(f"   {i+1}. Class: {cls}, Confidence: {conf:.2%}")
+                else:
+                    print("\n⚠️ No objects detected with current confidence threshold")
+            print(f"\n📁 Results saved to runs/detect/")
         else:
             print("❌ Invalid file path")
             
     elif choice == '2':
         # Folder of images
+        print("\n📁 Select a folder containing images")
         folder_path = get_folder_path("Enter folder path with images")
+        print(f"\n🔍 Running inference on all images in: {folder_path}")
         results = model.predict(
             str(folder_path),
             conf=conf_threshold,
@@ -95,8 +141,10 @@ def main():
         
     elif choice == '3':
         # Video file
-        video_path = get_folder_path("Enter video file path")
+        print("\n🎥 Select a video file")
+        video_path = get_file_path("Enter video file path", extension="")
         if video_path.is_file():
+            print(f"\n🔍 Running inference on video: {video_path.name}")
             results = model.predict(
                 str(video_path),
                 conf=conf_threshold,
@@ -104,7 +152,7 @@ def main():
                 save=True,
                 show=True
             )
-            print(f"\n✅ Video processed!")
+            print(f"\n✅ Video processed! Results saved to runs/detect/")
         else:
             print("❌ Invalid file path")
             
@@ -113,6 +161,7 @@ def main():
         cam_id = input("Enter camera ID (default: 0): ").strip() or "0"
         try:
             cam_id = int(cam_id)
+            print(f"\n🎥 Opening webcam {cam_id}... Press 'q' to quit")
             results = model.predict(
                 source=cam_id,
                 conf=conf_threshold,
@@ -124,9 +173,10 @@ def main():
             print(f"❌ Webcam error: {e}")
             
     elif choice == '5':
-        # URL
+        # Image URL
         url = input("Enter image URL: ").strip()
         if url:
+            print(f"\n🔍 Running inference on URL")
             results = model.predict(
                 url,
                 conf=conf_threshold,
@@ -134,7 +184,7 @@ def main():
                 save=True,
                 show=True
             )
-            print(f"\n✅ Detection complete!")
+            print(f"\n✅ Detection complete! Results saved to runs/detect/")
         else:
             print("❌ No URL provided")
     

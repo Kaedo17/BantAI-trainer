@@ -199,6 +199,41 @@ def get_class_names_from_labels(labels_path: Path, images_list: List[Path]) -> L
     class_names = [f"class_{i}" for i in sorted(class_ids)]
     return class_names
 
+def get_file_path(prompt, extension=".pt"):
+    """Get file path from user with validation"""
+    while True:
+        path = input(f"{prompt}: ").strip().strip('"')
+        if not path:
+            print("❌ Path cannot be empty. Please try again.")
+            continue
+        path = Path(path)
+        if not path.exists():
+            print(f"❌ Path '{path}' does not exist. Please try again.")
+            continue
+        if not path.is_file():
+            print(f"❌ '{path}' is not a file. Please try again.")
+            continue
+        if extension and path.suffix != extension:
+            print(f"❌ Please select a {extension} file. Got: {path.suffix}")
+            continue
+        return path
+
+def get_folder_path(prompt):
+    """Get folder path from user with validation"""
+    while True:
+        path = input(f"{prompt}: ").strip().strip('"')
+        if not path:
+            print("❌ Path cannot be empty. Please try again.")
+            continue
+        path = Path(path)
+        if not path.exists():
+            print(f"❌ Path '{path}' does not exist. Please try again.")
+            continue
+        if not path.is_dir():
+            print(f"❌ '{path}' is not a directory. Please try again.")
+            continue
+        return path
+
 def normalize_to_yolo_format(input_path: Path, output_path: Path, split_ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1)):
     """
     Convert any detected structure to standard YOLO format:
