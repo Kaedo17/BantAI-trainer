@@ -1,0 +1,7 @@
+names:
+- Open-Flame-Hazard
+nc: 1
+path: C:\Users\Kemji\Documents\BantAI trainer\Exposed-Ceiling
+test: images/test
+train: images/train
+val: images/val
