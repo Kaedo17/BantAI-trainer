@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YOLO model training with automatic structure detection
+YOLO model training with automatic structure detection and model download
 """
 
 import sys
@@ -10,9 +10,42 @@ from ultralytics import YOLO
 from config import (
     DEFAULT_MODEL, DEFAULT_EPOCHS, DEFAULT_BATCH, 
     DEFAULT_IMGSZ, DEFAULT_WORKERS, DEFAULT_PATIENCE,
-    get_gpu_info, print_banner
+    get_gpu_info, print_banner, download_model_if_needed, YOLO_MODEL_URLS
 )
-from utils import get_folder_path, detect_folder_structure, validate_and_show_structure
+from utils import get_folder_path, detect_folder_structure, update_data_yaml
+
+def get_available_models():
+    """Get list of available YOLO models grouped by version"""
+    models_by_version = {}
+    
+    for model_name in sorted(YOLO_MODEL_URLS.keys()):
+        # Extract version and size
+        if model_name.startswith('yolo26'):
+            version = 'YOLO26 (NMS-free, Edge-optimized)'
+            size_code = model_name.replace('yolo26', '').replace('.pt', '')
+        elif model_name.startswith('yolov10'):
+            version = 'YOLOv10'
+            size_code = model_name.replace('yolov10', '').replace('.pt', '')
+        elif model_name.startswith('yolov9'):
+            version = 'YOLOv9'
+            size_code = model_name.replace('yolov9', '').replace('.pt', '')
+        elif model_name.startswith('yolov8'):
+            version = 'YOLOv8'
+            size_code = model_name.replace('yolov8', '').replace('.pt', '')
+        else:
+            continue
+        
+        size_names = {
+            'n': 'nano', 's': 'small', 'm': 'medium', 'l': 'large', 'x': 'x-large',
+            't': 'tiny', 'c': 'compact', 'b': 'balanced', 'e': 'extra'
+        }
+        size_name = size_names.get(size_code, size_code)
+        
+        if version not in models_by_version:
+            models_by_version[version] = []
+        models_by_version[version].append((model_name, size_name))
+    
+    return models_by_version
 
 def main():
     print_banner("Model Training")
@@ -30,18 +63,12 @@ def main():
         
         if structure['has_train_val_test']:
             print("   ✅ Found valid YOLO structure with train/val/test splits")
-            print("   You can still train, but you need a data.yaml file.")
             
             # Create data.yaml on the fly
-            from utils import update_data_yaml
-            from config import SPLIT_RATIOS
-            
-            # Try to get class names from labels
             class_names = []
             if structure['type'] == 'split':
                 labels_path = structure['labels_path'] / 'train'
                 if labels_path.exists():
-                    # Extract class IDs from labels
                     class_ids = set()
                     for lbl_file in labels_path.glob('*.txt'):
                         with open(lbl_file, 'r') as f:
@@ -73,22 +100,27 @@ def main():
     print(f"   Class names: {dataset_info.get('names', 'unknown')}")
     
     # Get model selection
-    print(f"\n📦 Available models:")
-    models = [
-        "yolov26n.pt (nano)",
-        "yolov26s.pt (small - recommended)", 
-        "yolov26m.pt (medium)",
-        "yolov26l.pt (large)",
-        "yolov26x.pt (x-large)"
-    ]
-    for m in models:
-        print(f"   {m}")
+    print(f"\n📦 Available YOLO models:")
+    
+    models_by_version = get_available_models()
+    for version, models in models_by_version.items():
+        print(f"\n   {version}:")
+        for model_name, size_name in models:
+            default_marker = " (recommended)" if model_name == DEFAULT_MODEL else ""
+            print(f"      {model_name} - {size_name}{default_marker}")
     
     model_choice = input(f"\nEnter model name (default: {DEFAULT_MODEL}): ").strip()
     if not model_choice:
         model_choice = DEFAULT_MODEL
     if not model_choice.endswith('.pt'):
         model_choice += '.pt'
+    
+    # Download model if not available
+    if not download_model_if_needed(model_choice):
+        print("\n❌ Failed to get model. Please check the model name and try again.")
+        print("   Available models: yolo26s.pt, yolo26n.pt, yolo26m.pt, yolo26l.pt, yolo26x.pt")
+        print("   Also available: yolov8n.pt, yolov8s.pt, yolov9t.pt, yolov10n.pt, etc.")
+        sys.exit(1)
     
     # Get training parameters
     print("\n⚙️ Training Configuration")
