@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 YOLO Training Pipeline - Main Controller
-A unified interface for augmenting, splitting, training, and testing YOLO models
+A unified interface for merging, augmenting, splitting, training, and testing YOLO models
 """
 
 import os
@@ -23,6 +23,7 @@ class YOLOPipeline:
     def __init__(self):
         self.scripts_dir = Path(__file__).parent
         self.available_scripts = {
+            'merge': 'merge.py',
             'augment': 'augment.py',
             'split': 'split.py',
             'train': 'train.py',
@@ -35,11 +36,12 @@ class YOLOPipeline:
         
         print("\n📋 Available Options:")
         print("   ┌─────────────────────────────────────────────────┐")
+        print("   │ 0.  Merge Multiple Datasets (NEW!)              │")
         print("   │ 1.  Augment Images                              │")
         print("   │ 2.  Split Dataset (80% Train, 10% Val, 10% Test)│")
         print("   │ 3.  Train Model                                 │")
         print("   │ 4.  Test Model                                  │")
-        print("   │ 5.  Complete Pipeline (Augment → Split → Train) │")
+        print("   │ 5.  Complete Pipeline (Merge → Augment → Split → Train) │")
         print("   │ 6.  Quick Train (Skip Augment/Split)            │")
         print("   │ 7.  View GPU Info                               │")
         print("   │ 8.  Exit                                        │")
@@ -68,6 +70,10 @@ class YOLOPipeline:
             print(f"❌ Error running {script_name}: {e}")
             return False
     
+    def merge(self):
+        """Run dataset merging"""
+        return self.run_script('merge')
+    
     def augment(self):
         """Run augmentation"""
         return self.run_script('augment')
@@ -85,11 +91,11 @@ class YOLOPipeline:
         return self.run_script('test')
     
     def complete_pipeline(self):
-        """Run complete pipeline: augment → split → train"""
+        """Run complete pipeline: merge → augment → split → train"""
         print_banner("Complete Pipeline")
-        print("\nThis will run: Augment → Split → Train")
-        print("Make sure you have your dataset ready in the correct format.")
-        print("\n⚠️  Note: If your data is already split, consider using 'Quick Train' instead.")
+        print("\nThis will run: Merge → Augment → Split → Train")
+        print("Great for combining multiple datasets before training!")
+        print("\n⚠️  Note: If you only have one dataset, you can skip the merge step.")
         
         confirm = input("\nContinue? (y/n): ").strip().lower()
         if confirm != 'y':
@@ -97,6 +103,7 @@ class YOLOPipeline:
             return False
         
         steps = [
+            ('merge', "Step 0: Merging datasets (if multiple)"),
             ('augment', "Step 1: Augmenting images..."),
             ('split', "Step 2: Splitting dataset..."),
             ('train', "Step 3: Training model...")
@@ -106,6 +113,13 @@ class YOLOPipeline:
             print(f"\n{'='*60}")
             print(f"  {message}")
             print('='*60)
+            
+            # For merge, ask if user wants to skip if only one dataset
+            if step_name == 'merge':
+                skip = input("Do you want to merge datasets? (y/n, default: n): ").strip().lower()
+                if skip != 'y':
+                    print("⏭️  Skipping merge step...")
+                    continue
             
             success = self.run_script(step_name)
             if not success:
@@ -168,9 +182,11 @@ class YOLOPipeline:
         while True:
             self.print_menu()
             
-            choice = input("\n👉 Select an option (1-8): ").strip()
+            choice = input("\n👉 Select an option (0-8): ").strip()
             
-            if choice == '1':
+            if choice == '0':
+                self.merge()
+            elif choice == '1':
                 self.augment()
             elif choice == '2':
                 self.split()
@@ -189,7 +205,7 @@ class YOLOPipeline:
                 print("\n👋 Thanks for using YOLO Training Pipeline!")
                 break
             else:
-                print("❌ Invalid option. Please enter 1-8.")
+                print("❌ Invalid option. Please enter 0-8.")
             
             input("\nPress Enter to continue...")
 
@@ -197,10 +213,10 @@ class YOLOPipeline:
 def main():
     """Main entry point with command-line argument support"""
     parser = argparse.ArgumentParser(description='YOLO Training Pipeline')
-    parser.add_argument('--mode', type=str, choices=['augment', 'split', 'train', 'test', 'all', 'quick'],
+    parser.add_argument('--mode', type=str, choices=['merge', 'augment', 'split', 'train', 'test', 'all', 'quick'],
                         help='Run specific mode directly without menu')
     parser.add_argument('--dataset', type=str, help='Dataset path (for train mode)')
-    parser.add_argument('--model', type=str, default='yolov26s.pt', help='Model name')
+    parser.add_argument('--model', type=str, default='yolo26s.pt', help='Model name')
     parser.add_argument('--epochs', type=int, default=150, help='Number of epochs')
     parser.add_argument('--batch', type=int, default=16, help='Batch size')
     parser.add_argument('--conf', type=float, default=0.5, help='Confidence threshold for test')
@@ -213,7 +229,9 @@ def main():
     if args.mode:
         print_banner(f"Running in {args.mode} mode")
         
-        if args.mode == 'augment':
+        if args.mode == 'merge':
+            pipeline.merge()
+        elif args.mode == 'augment':
             pipeline.augment()
         elif args.mode == 'split':
             pipeline.split()
