@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YOLO model training with YOLOv26s
+YOLO model training with automatic structure detection
 """
 
 import sys
@@ -12,18 +12,65 @@ from config import (
     DEFAULT_IMGSZ, DEFAULT_WORKERS, DEFAULT_PATIENCE,
     get_gpu_info, print_banner
 )
-from utils import get_folder_path
+from utils import get_folder_path, detect_folder_structure, validate_and_show_structure
 
 def main():
     print_banner("Model Training")
     
     # Get dataset path
-    dataset_path = get_folder_path("Enter path to dataset folder (with data.yaml)")
+    dataset_path = get_folder_path("Enter path to dataset folder")
     data_yaml = dataset_path / 'data.yaml'
     
+    # If data.yaml doesn't exist, check if we can create it
     if not data_yaml.exists():
-        print(f"❌ data.yaml not found in {dataset_path}")
-        sys.exit(1)
+        print(f"\n⚠️  data.yaml not found in {dataset_path}")
+        print("   Checking folder structure...")
+        
+        structure = detect_folder_structure(dataset_path)
+        
+        if structure['has_train_val_test']:
+            print("   ✅ Found valid YOLO structure with train/val/test splits")
+            print("   You can still train, but you need a data.yaml file.")
+            
+            # Create data.yaml on the fly
+            from utils import update_data_yaml
+            from config import SPLIT_RATIOS
+            
+            # Try to get class names from labels
+            class_names = []
+            if structure['type'] == 'split':
+                labels_path = structure['labels_path'] / 'train'
+                if labels_path.exists():
+                    # Extract class IDs from labels
+                    class_ids = set()
+                    for lbl_file in labels_path.glob('*.txt'):
+                        with open(lbl_file, 'r') as f:
+                            for line in f:
+                                if line.strip():
+                                    try:
+                                        class_ids.add(int(line.split()[0]))
+                                    except:
+                                        pass
+                    class_names = [f"class_{i}" for i in sorted(class_ids)]
+            
+            if not class_names:
+                class_names = ['class_0']
+            
+            data_yaml = update_data_yaml(dataset_path, class_names)
+            print(f"   Created data.yaml at {data_yaml}")
+        else:
+            print("❌ Could not find valid YOLO structure")
+            print("   Expected: images/train, images/val, labels/train, labels/val")
+            sys.exit(1)
+    
+    # Load and display dataset info
+    import yaml
+    with open(data_yaml, 'r') as f:
+        dataset_info = yaml.safe_load(f)
+    
+    print(f"\n📊 Dataset info:")
+    print(f"   Classes: {dataset_info.get('nc', 'unknown')}")
+    print(f"   Class names: {dataset_info.get('names', 'unknown')}")
     
     # Get model selection
     print(f"\n📦 Available models:")
