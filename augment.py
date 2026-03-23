@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Image augmentation for YOLO datasets with automatic structure detection
+Output saved to Output/Augmented/ folder
 """
 
 import cv2
@@ -8,11 +9,23 @@ import numpy as np
 import shutil
 from pathlib import Path
 import sys
+
+# Add current directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+
 from config import DEFAULT_AUG_TARGET, print_banner
 from utils import (
-    get_folder_path, get_output_path, detect_folder_structure, 
-    validate_and_show_structure, normalize_to_yolo_format
+    get_folder_path, detect_folder_structure, 
+    validate_and_show_structure, ROOT_DIR
 )
+
+# Define augmentation base directory
+AUGMENTED_BASE = ROOT_DIR / "Output" / "Augmented"
+
+def ensure_augmented_base():
+    """Ensure the Augmented directory exists"""
+    AUGMENTED_BASE.mkdir(parents=True, exist_ok=True)
+    return AUGMENTED_BASE
 
 def flip_labels_horizontal(lines):
     """Flip YOLO labels horizontally"""
@@ -106,8 +119,16 @@ def copy_existing_splits(output_path, images_path, labels_path, structure):
 def main():
     print_banner("Image Augmentation")
     
-    # Get input folder
-    input_path = get_folder_path("Enter input folder path")
+    # Get input folder with navigation
+    while True:
+        input_path = get_folder_path("Enter input folder path", allow_cancel=True)
+        if input_path == 'BACK':
+            return
+        if input_path == 'CANCEL':
+            print("❌ Cancelled by user")
+            return
+        if input_path:
+            break
     
     # Detect and show structure
     print("\n🔍 Analyzing folder structure...")
@@ -119,18 +140,28 @@ def main():
         print("   1. folder/images/train, folder/images/val, folder/labels/train, folder/labels/val")
         print("   2. folder/train/images, folder/val/images, folder/train/labels, folder/val/labels")
         print("   3. folder/images, folder/labels (flat structure)")
-        sys.exit(1)
-    
-    # Get output folder
-    default_output = get_output_path(input_path, "augmented")
-    print(f"\n💡 Suggested output: {default_output}")
-    output_path = get_folder_path("Enter output folder path (or press Enter for suggested)")
+        return
     
     # Get target limit
     try:
         target = int(input(f"Enter target number of augmented images (default: {DEFAULT_AUG_TARGET}): ").strip() or str(DEFAULT_AUG_TARGET))
     except ValueError:
         target = DEFAULT_AUG_TARGET
+    
+    # Get output folder (will be created in Augmented directory)
+    ensure_augmented_base()
+    print(f"\n📁 Output will be saved in: {AUGMENTED_BASE}")
+    
+    default_name = f"{input_path.name}_augmented"
+    print(f"   Default name: {default_name}")
+    
+    folder_name = input("Enter name for augmented dataset folder: ").strip()
+    if not folder_name:
+        folder_name = default_name
+    
+    output_path = AUGMENTED_BASE / folder_name
+    output_path.mkdir(parents=True, exist_ok=True)
+    print(f"✅ Output folder: {output_path}")
     
     print(f"\n🚀 Starting augmentation...")
     print(f"   Input: {input_path}")
@@ -161,7 +192,7 @@ def main():
     
     if not train_images:
         print("❌ No training images found!")
-        sys.exit(1)
+        return
     
     print(f"\n📸 Found {len(train_images)} source training images")
     

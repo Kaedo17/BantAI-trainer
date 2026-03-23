@@ -1,7 +1,0 @@
-names:
-- class_0
-nc: 1
-path: C:\Users\Kemji\Documents\BantAI trainer\open-flame
-test: images/test
-train: images/train
-val: images/val

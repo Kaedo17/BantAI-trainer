@@ -1,25 +1,38 @@
 #!/usr/bin/env python3
 """
 YOLO model training with automatic structure detection and model download
+Output saved to Trained/ModelName folder
 """
 
 import sys
 import torch
 from pathlib import Path
 from ultralytics import YOLO
+import yaml
+
+# Add current directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+
 from config import (
     DEFAULT_MODEL, DEFAULT_EPOCHS, DEFAULT_BATCH, 
     DEFAULT_IMGSZ, DEFAULT_WORKERS, DEFAULT_PATIENCE,
     get_gpu_info, print_banner, download_model_if_needed, YOLO_MODEL_URLS
 )
-from utils import get_folder_path, detect_folder_structure, update_data_yaml
+from utils import get_folder_path, detect_folder_structure, update_data_yaml, ROOT_DIR
+
+# Define training output base
+TRAINED_BASE = ROOT_DIR / "Trained"
+
+def ensure_trained_base():
+    """Ensure the Trained directory exists"""
+    TRAINED_BASE.mkdir(parents=True, exist_ok=True)
+    return TRAINED_BASE
 
 def get_available_models():
     """Get list of available YOLO models grouped by version"""
     models_by_version = {}
     
     for model_name in sorted(YOLO_MODEL_URLS.keys()):
-        # Extract version and size
         if model_name.startswith('yolo26'):
             version = 'YOLO26 (NMS-free, Edge-optimized)'
             size_code = model_name.replace('yolo26', '').replace('.pt', '')
@@ -50,8 +63,17 @@ def get_available_models():
 def main():
     print_banner("Model Training")
     
-    # Get dataset path
-    dataset_path = get_folder_path("Enter path to dataset folder")
+    # Get dataset path with navigation
+    while True:
+        dataset_path = get_folder_path("Enter path to dataset folder", allow_cancel=True)
+        if dataset_path == 'BACK':
+            return
+        if dataset_path == 'CANCEL':
+            print("❌ Cancelled by user")
+            return
+        if dataset_path:
+            break
+    
     data_yaml = dataset_path / 'data.yaml'
     
     # If data.yaml doesn't exist, check if we can create it
@@ -88,10 +110,9 @@ def main():
         else:
             print("❌ Could not find valid YOLO structure")
             print("   Expected: images/train, images/val, labels/train, labels/val")
-            sys.exit(1)
+            return  # FIXED: replaced 'continue' with 'return'
     
     # Load and display dataset info
-    import yaml
     with open(data_yaml, 'r') as f:
         dataset_info = yaml.safe_load(f)
     
@@ -118,9 +139,7 @@ def main():
     # Download model if not available
     if not download_model_if_needed(model_choice):
         print("\n❌ Failed to get model. Please check the model name and try again.")
-        print("   Available models: yolo26s.pt, yolo26n.pt, yolo26m.pt, yolo26l.pt, yolo26x.pt")
-        print("   Also available: yolov8n.pt, yolov8s.pt, yolov9t.pt, yolov10n.pt, etc.")
-        sys.exit(1)
+        return
     
     # Get training parameters
     print("\n⚙️ Training Configuration")
@@ -133,9 +152,16 @@ def main():
     except ValueError:
         epochs, batch, imgsz, workers = DEFAULT_EPOCHS, DEFAULT_BATCH, DEFAULT_IMGSZ, DEFAULT_WORKERS
     
-    # Get project name
-    project_name = input("Enter project name (default: YOLO_Training): ").strip() or "YOLO_Training"
-    experiment_name = input("Enter experiment name (default: experiment_1): ").strip() or "experiment_1"
+    # Get output folder name (will be created in Trained directory)
+    ensure_trained_base()
+    print(f"\n📁 Output will be saved in: {TRAINED_BASE}")
+    model_name_input = input("Enter model name for output folder (e.g., Fire_Detector_v1): ").strip()
+    if not model_name_input:
+        model_name_input = "YOLO_Model"
+    
+    output_path = TRAINED_BASE / model_name_input
+    output_path.mkdir(parents=True, exist_ok=True)
+    print(f"✅ Models will be saved to: {output_path}")
     
     # GPU info
     gpu = get_gpu_info()
@@ -148,6 +174,7 @@ def main():
     print(f"\n🚀 Starting training...")
     print(f"   Model: {model_choice}")
     print(f"   Dataset: {data_yaml}")
+    print(f"   Output: {output_path}")
     print(f"   Epochs: {epochs}")
     print(f"   Batch size: {batch}")
     print(f"   Image size: {imgsz}")
@@ -165,8 +192,8 @@ def main():
             workers=workers,
             batch=batch,
             device=0 if torch.cuda.is_available() else 'cpu',
-            project=project_name,
-            name=experiment_name,
+            project=str(output_path),
+            name="weights",
             patience=DEFAULT_PATIENCE,
             save=True,
             exist_ok=True,
@@ -181,15 +208,22 @@ def main():
         )
         
         print(f"\n✅ Training complete!")
-        print(f"   Model saved to: {results.save_dir}")
+        print(f"   Model saved to: {output_path}")
         
         # Show model info
-        best_path = results.save_dir / "weights" / "best.pt"
-        print(f"   Best model: {best_path}")
+        best_path = output_path / "weights" / "best.pt"
+        if best_path.exists():
+            print(f"   Best model: {best_path}")
+        else:
+            alt_path = output_path / "weights" / "weights" / "best.pt"
+            if alt_path.exists():
+                print(f"   Best model: {alt_path}")
+            else:
+                print(f"   Check in: {output_path}")
         
     except Exception as e:
         print(f"❌ Training failed: {e}")
-        sys.exit(1)
+        return
 
 if __name__ == '__main__':
     main()

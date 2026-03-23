@@ -8,49 +8,69 @@ import torch
 from pathlib import Path
 from ultralytics import YOLO
 from config import get_gpu_info, print_banner
+from utils import get_file_path, get_folder_path, ROOT_DIR
 
-def get_file_path(prompt, extension=".pt"):
-    """Get file path from user with validation"""
-    while True:
-        path = input(f"{prompt}: ").strip().strip('"')
-        if not path:
-            print("❌ Path cannot be empty. Please try again.")
-            continue
-        path = Path(path)
-        if not path.exists():
-            print(f"❌ Path '{path}' does not exist. Please try again.")
-            continue
-        if not path.is_file():
-            print(f"❌ '{path}' is not a file. Please try again.")
-            continue
-        if path.suffix != extension:
-            print(f"❌ Please select a {extension} file. Got: {path.suffix}")
-            continue
-        return path
+# Define trained models base
+TRAINED_BASE = ROOT_DIR / "Trained"
 
-def get_folder_path(prompt):
-    """Get folder path from user with validation"""
-    while True:
-        path = input(f"{prompt}: ").strip().strip('"')
-        if not path:
-            print("❌ Path cannot be empty. Please try again.")
-            continue
-        path = Path(path)
-        if not path.exists():
-            print(f"❌ Path '{path}' does not exist. Please try again.")
-            continue
-        if not path.is_dir():
-            print(f"❌ '{path}' is not a directory. Please try again.")
-            continue
-        return path
+def browse_trained_models():
+    """Browse and select from trained models"""
+    if not TRAINED_BASE.exists():
+        print(f"\n❌ No trained models found in {TRAINED_BASE}")
+        return None
+    
+    models = []
+    for model_dir in TRAINED_BASE.iterdir():
+        if model_dir.is_dir():
+            # Check for best.pt in various locations
+            for weight_path in [
+                model_dir / "weights" / "best.pt",
+                model_dir / "best.pt",
+                model_dir / "weights" / "weights" / "best.pt"
+            ]:
+                if weight_path.exists():
+                    models.append((model_dir.name, weight_path))
+                    break
+    
+    if not models:
+        print(f"\n❌ No model files found in {TRAINED_BASE}")
+        return None
+    
+    print(f"\n📁 Trained Models in {TRAINED_BASE}:")
+    for i, (name, path) in enumerate(models):
+        print(f"   {i+1}. {name} -> {path}")
+    
+    try:
+        choice = input("\nSelect model number (or 0 to enter custom path): ").strip()
+        if choice == '0':
+            return None
+        idx = int(choice) - 1
+        if 0 <= idx < len(models):
+            return models[idx][1]
+    except:
+        pass
+    
+    return None
 
 def main():
     print_banner("Model Testing")
     
-    # Get model path - use file picker instead of folder picker
+    # Get model path - try to browse first
     print("\n📁 Select your trained model (.pt file)")
-    print("   Example: runs/detect/Open_Flame_Model/Model_1/weights/best.pt")
-    model_path = get_file_path("Enter path to model file (.pt)", extension=".pt")
+    print("   Trained models are stored in: Trained/")
+    
+    model_path = browse_trained_models()
+    
+    if model_path is None:
+        # Manual entry
+        model_path = get_file_path("Enter path to model file (.pt)", extension=".pt", allow_cancel=True)
+        if model_path == 'BACK':
+            return
+        if model_path == 'CANCEL':
+            print("❌ Cancelled by user")
+            return
+    
+    print(f"\n✅ Using model: {model_path}")
     
     # Get confidence threshold
     try:
@@ -93,14 +113,23 @@ def main():
     print("   3. Test on video file")
     print("   4. Test on webcam")
     print("   5. Test on image URL")
+    print("   0. Back to main menu")
     
-    choice = input("\nSelect option (1-5): ").strip()
+    choice = input("\nSelect option (0-5): ").strip()
     
-    if choice == '1':
+    if choice == '0':
+        return
+    
+    elif choice == '1':
         # Single image
         print("\n📸 Select an image file")
-        image_path = get_file_path("Enter image file path", extension="")
-        if image_path.is_file():
+        image_path = get_file_path("Enter image file path", extension="", allow_cancel=True)
+        if image_path == 'BACK':
+            return
+        if image_path == 'CANCEL':
+            print("❌ Cancelled by user")
+            return
+        if image_path and image_path.is_file():
             print(f"\n🔍 Running inference on: {image_path.name}")
             results = model.predict(
                 str(image_path),
@@ -127,23 +156,34 @@ def main():
     elif choice == '2':
         # Folder of images
         print("\n📁 Select a folder containing images")
-        folder_path = get_folder_path("Enter folder path with images")
-        print(f"\n🔍 Running inference on all images in: {folder_path}")
-        results = model.predict(
-            str(folder_path),
-            conf=conf_threshold,
-            iou=iou_threshold,
-            save=True,
-            show=False
-        )
-        print(f"\n✅ Processed {len(results)} images")
-        print(f"   Results saved to runs/detect/predict/")
+        folder_path = get_folder_path("Enter folder path with images", allow_cancel=True)
+        if folder_path == 'BACK':
+            return
+        if folder_path == 'CANCEL':
+            print("❌ Cancelled by user")
+            return
+        if folder_path:
+            print(f"\n🔍 Running inference on all images in: {folder_path}")
+            results = model.predict(
+                str(folder_path),
+                conf=conf_threshold,
+                iou=iou_threshold,
+                save=True,
+                show=False
+            )
+            print(f"\n✅ Processed {len(results)} images")
+            print(f"   Results saved to runs/detect/predict/")
         
     elif choice == '3':
         # Video file
         print("\n🎥 Select a video file")
-        video_path = get_file_path("Enter video file path", extension="")
-        if video_path.is_file():
+        video_path = get_file_path("Enter video file path", extension="", allow_cancel=True)
+        if video_path == 'BACK':
+            return
+        if video_path == 'CANCEL':
+            print("❌ Cancelled by user")
+            return
+        if video_path and video_path.is_file():
             print(f"\n🔍 Running inference on video: {video_path.name}")
             results = model.predict(
                 str(video_path),

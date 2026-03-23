@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Dataset Merger - Merge multiple YOLO datasets into one unified dataset
-Supports merging datasets with automatic structure detection and class mapping
+Output saved to Merged/ folder
 """
 
 import os
@@ -16,7 +16,18 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import print_banner
-from utils import detect_folder_structure, validate_and_show_structure
+from utils import (
+    detect_folder_structure, validate_and_show_structure, 
+    get_folder_path, get_output_folder, ROOT_DIR
+)
+
+# Define merged datasets base
+MERGED_BASE = ROOT_DIR / "Merged"
+
+def ensure_merged_base():
+    """Ensure the Merged directory exists"""
+    MERGED_BASE.mkdir(parents=True, exist_ok=True)
+    return MERGED_BASE
 
 
 class DatasetMerger:
@@ -28,19 +39,42 @@ class DatasetMerger:
         self.global_class_map = {}
         self.next_class_id = 0
         
-    def get_folder_path(self, prompt):
-        """Get folder path from user with validation"""
+    def get_folder_path_with_browse(self, prompt):
+        """Get folder path with option to browse"""
         while True:
-            path = input(f"{prompt}: ").strip().strip('"')
-            if not path:
-                print("❌ Path cannot be empty. Please try again.")
+            print(f"\n📁 {prompt}")
+            print("   Options:")
+            print("      - Type a path")
+            print("      - Type 'browse' to see current directory")
+            print("      - Type 'back' to go back")
+            print("      - Type 'cancel' to exit")
+            
+            choice = input("\n👉 Your choice: ").strip().strip('"')
+            
+            if choice.lower() == 'browse':
+                current_dir = Path.cwd()
+                print(f"\n📂 Current directory: {current_dir}")
+                folders = [item for item in current_dir.iterdir() if item.is_dir()]
+                print("\n   📁 Folders:")
+                for folder in sorted(folders)[:20]:
+                    print(f"      {folder.name}")
                 continue
-            path = Path(path)
+            
+            if choice.lower() == 'back':
+                return 'BACK'
+            if choice.lower() == 'cancel':
+                return 'CANCEL'
+            
+            if not choice:
+                print("❌ Path cannot be empty.")
+                continue
+            
+            path = Path(choice)
             if not path.exists():
-                print(f"❌ Path '{path}' does not exist. Please try again.")
+                print(f"❌ Path '{path}' does not exist.")
                 continue
             if not path.is_dir():
-                print(f"❌ '{path}' is not a directory. Please try again.")
+                print(f"❌ '{path}' is not a directory.")
                 continue
             return path
     
@@ -60,7 +94,6 @@ class DatasetMerger:
         labels_path = None
         
         if structure['type'] == 'split':
-            # Get from train split
             train_img_path = structure['images_path'] / 'train'
             train_lbl_path = structure['labels_path'] / 'train'
             
@@ -103,7 +136,7 @@ class DatasetMerger:
                 pass
         
         # Scan labels to find class IDs
-        for img in images[:100]:  # Sample first 100 images
+        for img in images[:100]:
             lbl = labels_path / f"{img.stem}.txt"
             if lbl.exists():
                 with open(lbl, 'r') as f:
@@ -118,7 +151,6 @@ class DatasetMerger:
         print(f"   Found {len(images)} images")
         print(f"   Found {len(class_ids)} unique class IDs: {sorted(class_ids)}")
         
-        # Get class names
         if class_names:
             print(f"   Class names from data.yaml: {class_names}")
         else:
@@ -178,7 +210,6 @@ class DatasetMerger:
             
             output_lbl = output_labels_dir / f"{img.stem}.txt"
             
-            # Read and update labels
             updated_lines = []
             with open(lbl_file, 'r') as f:
                 for line in f:
@@ -191,12 +222,9 @@ class DatasetMerger:
                             if new_class is not None:
                                 parts[0] = str(new_class)
                                 updated_lines.append(' '.join(parts))
-                            else:
-                                print(f"   ⚠️ Warning: Class {old_class} not mapped in {lbl_file}")
                         except:
                             updated_lines.append(line)
             
-            # Write updated labels
             if updated_lines:
                 with open(output_lbl, 'w') as f:
                     f.write('\n'.join(updated_lines) + '\n')
@@ -217,11 +245,16 @@ class DatasetMerger:
         
         # Collect all datasets
         print("\n📁 Please provide the paths to your datasets:")
-        print("   (Each dataset should have images and labels in YOLO format)")
         
         for i in range(num_datasets):
             print(f"\n--- Dataset {i+1} ---")
-            dataset_path = self.get_folder_path(f"Enter path to dataset {i+1}")
+            dataset_path = self.get_folder_path_with_browse(f"Enter path to dataset {i+1}")
+            
+            if dataset_path == 'BACK':
+                return
+            if dataset_path == 'CANCEL':
+                print("❌ Cancelled by user")
+                return
             
             info = self.detect_dataset_info(dataset_path)
             if info:
@@ -253,10 +286,16 @@ class DatasetMerger:
             print(f"   ID {class_id}: {self.global_class_map[class_id]}")
         print(f"\n   Total classes: {len(self.global_class_map)}")
         
-        # Get output folder
-        default_output = Path.cwd() / "merged_dataset"
-        print(f"\n💡 Suggested output: {default_output}")
-        output_path = self.get_folder_path("Enter output folder path (or press Enter for suggested)")
+        # Get output folder (will be created in Merged directory)
+        ensure_merged_base()
+        print(f"\n📁 Output will be saved in: {MERGED_BASE}")
+        folder_name = input("Enter name for merged dataset folder: ").strip()
+        if not folder_name:
+            folder_name = "merged_dataset"
+        
+        output_path = MERGED_BASE / folder_name
+        output_path.mkdir(parents=True, exist_ok=True)
+        print(f"✅ Output folder: {output_path}")
         
         # Create output structure
         for split in ['train', 'val', 'test']:
@@ -267,7 +306,6 @@ class DatasetMerger:
         print_banner("Merging Datasets")
         
         total_images = 0
-        total_labels_updated = 0
         
         for ds in self.datasets:
             print(f"\n📦 Processing: {ds['name']}")
@@ -283,7 +321,7 @@ class DatasetMerger:
                 img_source = ds['structure']['images_path']
                 lbl_source = ds['structure']['labels_path']
             
-            # Output paths (all go to train, we'll split later if needed)
+            # Output paths (all go to train, will split later)
             output_images = output_path / 'images' / 'train'
             output_labels = output_path / 'labels' / 'train'
             
@@ -296,11 +334,9 @@ class DatasetMerger:
                 if img.suffix.lower() not in ['.jpg', '.jpeg', '.png', '.bmp']:
                     continue
                 
-                # Copy image with unique name to avoid conflicts
                 new_name = f"{ds['name']}_{img.name}"
                 shutil.copy(img, output_images / new_name)
                 
-                # Update and copy label
                 lbl_file = lbl_source / f"{img.stem}.txt"
                 if lbl_file.exists():
                     output_lbl = output_labels / f"{ds['name']}_{img.stem}.txt"
@@ -325,7 +361,6 @@ class DatasetMerger:
                             f.write('\n'.join(updated_lines) + '\n')
                         images_copied += 1
                     else:
-                        # No valid labels, remove the image we copied
                         (output_images / new_name).unlink()
             
             print(f"   Copied {images_copied} images with updated labels")
@@ -362,10 +397,8 @@ class DatasetMerger:
         split_choice = input("\nWould you like to split this dataset now? (y/n): ").strip().lower()
         if split_choice == 'y':
             print("\n🚀 Running dataset split...")
-            # Import and run split
             try:
                 from split import main as split_main
-                # Temporarily override sys.argv
                 original_argv = sys.argv
                 sys.argv = ['split.py']
                 split_main()
