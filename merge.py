@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Dataset Merger - Merge multiple YOLO datasets into one unified dataset
-Output saved to Merged/ folder
+Output saved to Output/Merged/ folder
 """
 
 import os
@@ -18,11 +18,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import print_banner
 from utils import (
     detect_folder_structure, validate_and_show_structure, 
-    get_folder_path, get_output_folder, ROOT_DIR
+    get_folder_path, ROOT_DIR
 )
 
 # Define merged datasets base
-MERGED_BASE = ROOT_DIR / "Merged"
+MERGED_BASE = ROOT_DIR / "Output" / "Merged"
 
 def ensure_merged_base():
     """Ensure the Merged directory exists"""
@@ -35,8 +35,8 @@ class DatasetMerger:
     
     def __init__(self):
         self.datasets = []
-        self.class_mappings = {}
-        self.global_class_map = {}
+        self.class_mappings = {}  # Maps dataset path -> {local_id: global_id}
+        self.global_class_map = {}  # Maps global_id -> class_name
         self.next_class_id = 0
         
     def get_folder_path_with_browse(self, prompt):
@@ -151,11 +151,15 @@ class DatasetMerger:
         print(f"   Found {len(images)} images")
         print(f"   Found {len(class_ids)} unique class IDs: {sorted(class_ids)}")
         
+        # Get class names from data.yaml or generate them
         if class_names:
-            print(f"   Class names from data.yaml: {class_names}")
+            # Use class names from data.yaml
+            class_names_dict = class_names
+            print(f"   Class names from data.yaml: {class_names_dict}")
         else:
-            class_names = {cid: f"class_{cid}" for cid in sorted(class_ids)}
-            print(f"   Using generated class names: {class_names}")
+            # Generate class names from IDs
+            class_names_dict = {cid: f"class_{cid}" for cid in sorted(class_ids)}
+            print(f"   Using generated class names: {class_names_dict}")
         
         return {
             'path': dataset_path,
@@ -163,7 +167,7 @@ class DatasetMerger:
             'images': images,
             'labels_path': labels_path,
             'class_ids': class_ids,
-            'class_names': class_names,
+            'class_names': class_names_dict,
             'name': dataset_path.name
         }
     
@@ -176,9 +180,10 @@ class DatasetMerger:
         
         mapping = {}
         for local_id in sorted(local_classes):
+            # Get the class name for this local ID
             local_name = local_names.get(local_id, f"class_{local_id}")
             
-            # Check if this class already exists in global map
+            # Check if this class already exists in global map (by name)
             global_id = None
             for gid, gname in self.global_class_map.items():
                 if gname.lower() == local_name.lower():
@@ -186,6 +191,7 @@ class DatasetMerger:
                     print(f"   '{local_name}' (local ID {local_id}) → global ID {global_id} (matched by name)")
                     break
             
+            # If not found, create new global ID
             if global_id is None:
                 global_id = self.next_class_id
                 self.global_class_map[global_id] = local_name
@@ -195,42 +201,6 @@ class DatasetMerger:
             mapping[local_id] = global_id
         
         return mapping
-    
-    def update_labels(self, source_dir: Path, labels_path: Path, mapping: Dict, output_labels_dir: Path):
-        """Copy and update labels with new class IDs"""
-        count = 0
-        
-        for img in source_dir.glob('*.*'):
-            if img.suffix.lower() not in ['.jpg', '.jpeg', '.png', '.bmp']:
-                continue
-            
-            lbl_file = labels_path / f"{img.stem}.txt"
-            if not lbl_file.exists():
-                continue
-            
-            output_lbl = output_labels_dir / f"{img.stem}.txt"
-            
-            updated_lines = []
-            with open(lbl_file, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        parts = line.split()
-                        try:
-                            old_class = int(parts[0])
-                            new_class = mapping.get(old_class)
-                            if new_class is not None:
-                                parts[0] = str(new_class)
-                                updated_lines.append(' '.join(parts))
-                        except:
-                            updated_lines.append(line)
-            
-            if updated_lines:
-                with open(output_lbl, 'w') as f:
-                    f.write('\n'.join(updated_lines) + '\n')
-                count += 1
-        
-        return count
     
     def merge_datasets(self):
         """Main merge function"""
@@ -271,7 +241,7 @@ class DatasetMerger:
         for i, ds in enumerate(self.datasets):
             print(f"\nDataset {i+1}: {ds['name']}")
             print(f"   Images: {len(ds['images'])}")
-            print(f"   Classes: {ds['class_ids']}")
+            print(f"   Classes: {sorted(ds['class_ids'])}")
             print(f"   Class names: {ds['class_names']}")
         
         # Create class mappings
@@ -289,9 +259,13 @@ class DatasetMerger:
         # Get output folder (will be created in Merged directory)
         ensure_merged_base()
         print(f"\n📁 Output will be saved in: {MERGED_BASE}")
+        
+        default_name = "merged_dataset"
+        print(f"   Default name: {default_name}")
+        
         folder_name = input("Enter name for merged dataset folder: ").strip()
         if not folder_name:
-            folder_name = "merged_dataset"
+            folder_name = default_name
         
         output_path = MERGED_BASE / folder_name
         output_path.mkdir(parents=True, exist_ok=True)
@@ -334,9 +308,11 @@ class DatasetMerger:
                 if img.suffix.lower() not in ['.jpg', '.jpeg', '.png', '.bmp']:
                     continue
                 
+                # Create unique filename with dataset name prefix
                 new_name = f"{ds['name']}_{img.name}"
                 shutil.copy(img, output_images / new_name)
                 
+                # Find and update label file
                 lbl_file = lbl_source / f"{img.stem}.txt"
                 if lbl_file.exists():
                     output_lbl = output_labels / f"{ds['name']}_{img.stem}.txt"
@@ -353,7 +329,10 @@ class DatasetMerger:
                                     if new_class is not None:
                                         parts[0] = str(new_class)
                                         updated_lines.append(' '.join(parts))
-                                except:
+                                    else:
+                                        print(f"   ⚠️ Warning: Class {old_class} not mapped in {img.name}")
+                                except Exception as e:
+                                    print(f"   ⚠️ Error parsing line: {line} - {e}")
                                     updated_lines.append(line)
                     
                     if updated_lines:
@@ -361,12 +340,19 @@ class DatasetMerger:
                             f.write('\n'.join(updated_lines) + '\n')
                         images_copied += 1
                     else:
+                        # No valid labels, remove the image we copied
                         (output_images / new_name).unlink()
+                else:
+                    print(f"   ⚠️ No label file for: {img.name}")
             
             print(f"   Copied {images_copied} images with updated labels")
             total_images += images_copied
         
         print(f"\n✅ Total images merged: {total_images}")
+        
+        if total_images == 0:
+            print("❌ No images were successfully merged. Please check your datasets.")
+            return
         
         # Create data.yaml
         class_names_list = [self.global_class_map[i] for i in sorted(self.global_class_map.keys())]
@@ -399,6 +385,7 @@ class DatasetMerger:
             print("\n🚀 Running dataset split...")
             try:
                 from split import main as split_main
+                # Temporarily override sys.argv
                 original_argv = sys.argv
                 sys.argv = ['split.py']
                 split_main()
