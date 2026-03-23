@@ -131,9 +131,14 @@ class DatasetMerger:
                 with open(data_yaml, 'r') as f:
                     yaml_data = yaml.safe_load(f)
                     if 'names' in yaml_data:
-                        class_names = {i: name for i, name in enumerate(yaml_data['names'])}
-            except:
-                pass
+                        names = yaml_data['names']
+                        # Handle both list and dict formats
+                        if isinstance(names, list):
+                            class_names = {i: str(name) for i, name in enumerate(names)}
+                        elif isinstance(names, dict):
+                            class_names = {int(k): str(v) for k, v in names.items()}
+            except Exception as e:
+                print(f"   ⚠️ Error reading data.yaml: {e}")
         
         # Scan labels to find class IDs
         for img in images[:100]:
@@ -153,8 +158,8 @@ class DatasetMerger:
         
         # Get class names from data.yaml or generate them
         if class_names:
-            # Use class names from data.yaml
-            class_names_dict = class_names
+            # Convert all class names to strings
+            class_names_dict = {cid: str(class_names.get(cid, f"class_{cid}")) for cid in class_ids}
             print(f"   Class names from data.yaml: {class_names_dict}")
         else:
             # Generate class names from IDs
@@ -180,13 +185,17 @@ class DatasetMerger:
         
         mapping = {}
         for local_id in sorted(local_classes):
-            # Get the class name for this local ID
+            # Get the class name for this local ID - ensure it's a string
             local_name = local_names.get(local_id, f"class_{local_id}")
+            # Convert to string if it's not already
+            local_name = str(local_name)
             
             # Check if this class already exists in global map (by name)
             global_id = None
             for gid, gname in self.global_class_map.items():
-                if gname.lower() == local_name.lower():
+                # Ensure gname is string for comparison
+                gname_str = str(gname)
+                if gname_str.lower() == local_name.lower():
                     global_id = gid
                     print(f"   '{local_name}' (local ID {local_id}) → global ID {global_id} (matched by name)")
                     break
@@ -242,7 +251,9 @@ class DatasetMerger:
             print(f"\nDataset {i+1}: {ds['name']}")
             print(f"   Images: {len(ds['images'])}")
             print(f"   Classes: {sorted(ds['class_ids'])}")
-            print(f"   Class names: {ds['class_names']}")
+            # Show class names as strings
+            class_names_str = {k: str(v) for k, v in ds['class_names'].items()}
+            print(f"   Class names: {class_names_str}")
         
         # Create class mappings
         print_banner("Class Mapping")
@@ -355,7 +366,7 @@ class DatasetMerger:
             return
         
         # Create data.yaml
-        class_names_list = [self.global_class_map[i] for i in sorted(self.global_class_map.keys())]
+        class_names_list = [str(self.global_class_map[i]) for i in sorted(self.global_class_map.keys())]
         data_yaml = {
             'path': str(output_path),
             'train': 'images/train',
