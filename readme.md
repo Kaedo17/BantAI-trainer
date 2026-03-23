@@ -11,6 +11,7 @@ Python 3.10+ | PyTorch 2.0+ | Ultralytics 8.0+ | MIT License
 - [Overview](#overview)
 - [Features](#features)
 - [Folder Structure](#folder-structure)
+- [Folder Structure](#folder-structure)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Detailed Usage](#detailed-usage)
@@ -18,6 +19,8 @@ Python 3.10+ | PyTorch 2.0+ | Ultralytics 8.0+ | MIT License
 - [Configuration](#configuration)
 - [Troubleshooting](#troubleshooting)
 - [Examples](#examples)
+- [Output Structure](#output-structure)
+- [FAQ](#faq)
 - [Output Structure](#output-structure)
 - [FAQ](#faq)
 
@@ -129,10 +132,12 @@ python main.py
 Available Options:
    ┌─────────────────────────────────────────────────┐
    │ 0.  Merge Multiple Datasets (NEW!)              │
+   │ 0.  Merge Multiple Datasets (NEW!)              │
    │ 1.  Augment Images                              │
    │ 2.  Split Dataset (80% Train, 10% Val, 10% Test)│
    │ 3.  Train Model                                 │
    │ 4.  Test Model                                  │
+   │ 5.  Complete Pipeline (Merge → Augment → Split → Train) │
    │ 5.  Complete Pipeline (Merge → Augment → Split → Train) │
    │ 6.  Quick Train (Skip Augment/Split)            │
    │ 7.  View GPU Info                               │
@@ -378,6 +383,7 @@ model.export(format="tflite")
 ## Examples
 
 ### Example 1: Complete Pipeline from Scratch
+### Example 1: Complete Pipeline from Scratch
 
 1. Place your images in a folder with labels:
 my_dataset/
@@ -437,6 +443,7 @@ Enter confidence threshold: 0.7
 Choose test option: 1 (Single image)
 Enter image path: test_image.jpg
 
+### Example 5: Command Line Mode
 ### Example 5: Command Line Mode
 
 # Quick train
