@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 Image augmentation for YOLO datasets with automatic structure detection
-Output saved to Output/Augmented/ folder
+Output saved to Output/Augmented/ folder with preserved class information
 """
 
 import cv2
 import numpy as np
 import shutil
+import yaml
 from pathlib import Path
 import sys
 
@@ -16,11 +17,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import DEFAULT_AUG_TARGET, print_banner
 from utils import (
     get_folder_path, detect_folder_structure, 
-    validate_and_show_structure, ROOT_DIR
+    validate_and_show_structure, ROOT_DIR, OUTPUT_BASE,
+    copy_data_yaml, create_default_data_yaml
 )
 
 # Define augmentation base directory
-AUGMENTED_BASE = ROOT_DIR / "Output" / "Augmented"
+AUGMENTED_BASE = OUTPUT_BASE / "Augmented"
 
 def ensure_augmented_base():
     """Ensure the Augmented directory exists"""
@@ -84,7 +86,6 @@ def get_train_images(structure, images_path, labels_path):
                 images.extend(list(train_img_path.glob(ext)))
                 
     elif structure['type'] in ['flat', 'mixed']:
-        # For flat structure, we need to split first or use all as train
         print("\n⚠️  Flat structure detected. All images will be used for augmentation.")
         print("   Consider splitting your dataset first if you need separate validation.")
         for ext in ['*.jpg', '*.jpeg', '*.png', '*.bmp']:
@@ -162,6 +163,11 @@ def main():
     output_path = AUGMENTED_BASE / folder_name
     output_path.mkdir(parents=True, exist_ok=True)
     print(f"✅ Output folder: {output_path}")
+    
+    # CRITICAL: Copy data.yaml to preserve class information
+    print("\n📋 Preserving dataset configuration...")
+    if not copy_data_yaml(input_path, output_path):
+        print("   ⚠️ No data.yaml found, will create default after augmentation")
     
     print(f"\n🚀 Starting augmentation...")
     print(f"   Input: {input_path}")

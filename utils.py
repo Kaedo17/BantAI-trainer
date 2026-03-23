@@ -44,55 +44,11 @@ def get_folder_path(prompt, allow_cancel=True):
             continue
         return path
 
-def get_folder_path_with_browse(prompt, allow_cancel=True):
-    """Get folder path with option to browse current directory"""
-    while True:
-        print(f"\n📁 {prompt}")
-        print("   Options:")
-        print("      - Type a path")
-        print("      - Type 'browse' to see current directory contents")
-        if allow_cancel:
-            print("      - Type 'back' to go back")
-            print("      - Type 'cancel' to exit")
-        
-        choice = input("\n👉 Your choice: ").strip().strip('"')
-        
-        if choice.lower() == 'browse':
-            current_dir = Path.cwd()
-            print(f"\n📂 Current directory: {current_dir}")
-            items = list(current_dir.iterdir())
-            folders = [item for item in items if item.is_dir()]
-            files = [item for item in items if item.is_file()]
-            
-            if folders:
-                print("\n   📁 Folders:")
-                for folder in sorted(folders)[:20]:
-                    print(f"      {folder.name}")
-            if files:
-                print("\n   📄 Files (first 20):")
-                for file in sorted(files)[:20]:
-                    print(f"      {file.name}")
-            print("\n   (Use full path to navigate to subfolders)")
-            continue
-        
-        if allow_cancel:
-            if choice.lower() == 'back':
-                return 'BACK'
-            if choice.lower() == 'cancel':
-                return 'CANCEL'
-        
-        if not choice:
-            print("❌ Path cannot be empty. Please try again.")
-            continue
-        
-        path = Path(choice)
-        if not path.exists():
-            print(f"❌ Path '{path}' does not exist. Please try again.")
-            continue
-        if not path.is_dir():
-            print(f"❌ '{path}' is not a directory. Please try again.")
-            continue
-        return path
+def get_output_path(input_path, suffix):
+    """Generate output path based on input folder name (legacy function)"""
+    parent = input_path.parent
+    name = f"{input_path.name}_{suffix}"
+    return parent / name
 
 def get_output_folder(prompt, default_name=None, allow_cancel=True):
     """Get output folder path with creation option"""
@@ -146,12 +102,6 @@ def get_output_folder(prompt, default_name=None, allow_cancel=True):
                 print(f"❌ Could not create folder: {e}")
                 continue
 
-def get_output_path(input_path, suffix):
-    """Generate output path based on input folder name (legacy)"""
-    parent = input_path.parent
-    name = f"{input_path.name}_{suffix}"
-    return parent / name
-
 def detect_folder_structure(folder_path: Path) -> Dict:
     """Automatically detect YOLO folder structure"""
     result = {
@@ -185,8 +135,6 @@ def detect_folder_structure(folder_path: Path) -> Dict:
     # Structure 2: folder/train/images, folder/val/images, folder/train/labels, folder/val/labels
     train_images = folder_path / 'train' / 'images'
     train_labels = folder_path / 'train' / 'labels'
-    val_images = folder_path / 'val' / 'images'
-    val_labels = folder_path / 'val' / 'labels'
     
     if train_images.exists() and train_labels.exists():
         result['type'] = 'split_alt'
@@ -195,7 +143,7 @@ def detect_folder_structure(folder_path: Path) -> Dict:
         result['splits'] = []
         if train_images.exists():
             result['splits'].append('train')
-        if val_images.exists():
+        if (folder_path / 'val' / 'images').exists():
             result['splits'].append('val')
         if (folder_path / 'test' / 'images').exists():
             result['splits'].append('test')
@@ -260,19 +208,36 @@ def validate_and_show_structure(folder_path: Path) -> Dict:
     
     return structure
 
-def copy_files_with_structure(src_path: Path, dst_path: Path, files_dict: Dict[str, List[Path]]):
-    """Copy files preserving structure"""
-    for split_name, images_list in files_dict.items():
-        for img in images_list:
-            shutil.copy(img, dst_path / 'images' / split_name / img.name)
-            lbl = img.with_suffix('.txt')
-            if lbl.exists():
-                shutil.copy(lbl, dst_path / 'labels' / split_name / lbl.name)
+def copy_data_yaml(source_path: Path, dest_path: Path) -> bool:
+    """Copy and update data.yaml preserving class information"""
+    source_yaml = source_path / 'data.yaml'
+    if source_yaml.exists():
+        try:
+            with open(source_yaml, 'r') as f:
+                data_config = yaml.safe_load(f)
+            
+            # Update path to new location
+            data_config['path'] = str(dest_path)
+            
+            # Save to destination
+            dest_yaml = dest_path / 'data.yaml'
+            with open(dest_yaml, 'w') as f:
+                yaml.dump(data_config, f, default_flow_style=False)
+            
+            print(f"   ✅ Copied data.yaml with {data_config.get('nc', 0)} classes")
+            return True
+        except Exception as e:
+            print(f"   ⚠️ Could not copy data.yaml: {e}")
+            return False
+    return False
 
-def update_data_yaml(folder_path: Path, class_names: List[str]):
-    """Create or update data.yaml file"""
-    data_yaml = {
-        'path': str(folder_path),
+def create_default_data_yaml(dest_path: Path, class_names: List[str] = None):
+    """Create a default data.yaml file"""
+    if class_names is None:
+        class_names = ['class_0']
+    
+    data_config = {
+        'path': str(dest_path),
         'train': 'images/train',
         'val': 'images/val',
         'test': 'images/test',
@@ -280,10 +245,17 @@ def update_data_yaml(folder_path: Path, class_names: List[str]):
         'names': class_names
     }
     
+    dest_yaml = dest_path / 'data.yaml'
+    with open(dest_yaml, 'w') as f:
+        yaml.dump(data_config, f, default_flow_style=False)
+    
+    print(f"   📝 Created default data.yaml with {len(class_names)} classes")
+
+def update_data_yaml(folder_path: Path, data_config: Dict):
+    """Update data.yaml with given configuration"""
     yaml_path = folder_path / 'data.yaml'
     with open(yaml_path, 'w') as f:
-        yaml.dump(data_yaml, f, default_flow_style=False)
-    
+        yaml.dump(data_config, f, default_flow_style=False)
     return yaml_path
 
 def get_class_names_from_labels(labels_path: Path, images_list: List[Path]) -> List[str]:
@@ -409,6 +381,13 @@ def normalize_to_yolo_format(input_path: Path, output_path: Path, split_ratios: 
     class_names = get_class_names_from_labels(structure['labels_path'], valid_images)
     
     # Create data.yaml
-    yaml_path = update_data_yaml(output_path, class_names)
+    yaml_path = update_data_yaml(output_path, {
+        'path': str(output_path),
+        'train': 'images/train',
+        'val': 'images/val',
+        'test': 'images/test',
+        'nc': len(class_names),
+        'names': class_names
+    })
     
     return True, yaml_path
